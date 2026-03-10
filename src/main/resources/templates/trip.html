@@ -29,8 +29,9 @@
                     </div>
                     {#else}
                     {#for pic in pictures}
-                    <div class="comic-border-sm bg-white dark:bg-slate-900 relative group overflow-hidden flex flex-col">
-                        <div class="aspect-[4/5] relative overflow-hidden cursor-pointer" onclick="openLightbox('{pic.imageUrl}')">
+                    <div class="comic-border-sm bg-white dark:bg-slate-900 relative group overflow-hidden flex flex-col"
+                         data-poi="{pic.pointsOfInterest}" data-location="{pic.location}">
+                        <div class="aspect-[4/5] relative overflow-hidden cursor-pointer" onclick="openLightbox(this)">
                             <img class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
                                 src="{pic.imageUrl}" alt="{pic.locationShort}" />
                             <div class="absolute top-4 left-4">
@@ -61,18 +62,38 @@
     </div>
 
     <!-- Lightbox Modal -->
-    <div id="lightbox" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/90 p-4 transition-opacity cursor-pointer" onclick="closeLightbox()">
-        <button class="absolute top-6 right-6 text-white hover:text-accent-yellow transition-colors" onclick="closeLightbox()">
+    <div id="lightbox" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/90 p-4 md:p-8 transition-opacity cursor-pointer" onclick="closeLightbox()">
+        <button class="absolute top-4 right-4 md:top-6 md:right-6 text-white hover:text-accent-yellow transition-colors z-10" onclick="closeLightbox()">
             <span class="material-symbols-outlined text-4xl">close</span>
         </button>
-        <img id="lightbox-img" src="" class="max-w-full max-h-[90vh] object-contain rounded shadow-2xl comic-border-sm bg-white cursor-auto" onclick="event.stopPropagation()" />
+        <div class="flex flex-col items-center gap-4 max-w-5xl max-h-[90vh] w-full cursor-auto overflow-y-auto" onclick="event.stopPropagation()">
+            <!-- Image -->
+            <img id="lightbox-img" src="" class="max-w-full max-h-[60vh] object-contain rounded shadow-2xl comic-border-sm bg-white" />
+            <!-- POI Panel -->
+            <div id="lightbox-poi" class="bg-white dark:bg-slate-900 rounded comic-border-sm p-5 w-full max-h-[25vh] overflow-y-auto">
+                <div class="flex items-center gap-2 mb-3 border-b-2 border-black pb-2">
+                    <span class="material-symbols-outlined text-primary text-xl">explore_nearby</span>
+                    <h3 id="lightbox-poi-title" class="text-lg font-black uppercase italic text-slate-900 dark:text-white">Nearby</h3>
+                </div>
+                <div id="lightbox-poi-content" class="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-300 prose prose-sm prose-slate dark:prose-invert max-w-none">
+                </div>
+            </div>
+        </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        function openLightbox(url) {
+        function openLightbox(el) {
+            const card = el.closest('[data-poi]');
+            const imgSrc = el.querySelector('img').src;
+            const poi = card.dataset.poi || '';
+            const location = card.dataset.location || 'Nearby';
+
+            document.getElementById('lightbox-img').src = imgSrc;
+            document.getElementById('lightbox-poi-title').textContent = location;
+            document.getElementById('lightbox-poi-content').innerHTML = marked.parse(poi || 'No points of interest found.');
+
             const lightbox = document.getElementById('lightbox');
-            const lightboxImg = document.getElementById('lightbox-img');
-            lightboxImg.src = url;
             lightbox.classList.remove('hidden');
             lightbox.classList.add('flex');
             document.body.style.overflow = 'hidden';
@@ -83,6 +104,7 @@
             lightbox.classList.add('hidden');
             lightbox.classList.remove('flex');
             document.getElementById('lightbox-img').src = '';
+            document.getElementById('lightbox-poi-content').innerHTML = '';
             document.body.style.overflow = '';
         }
 
