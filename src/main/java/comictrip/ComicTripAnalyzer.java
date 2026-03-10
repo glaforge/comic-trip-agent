@@ -1,0 +1,221 @@
+package comictrip;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.agents.ParallelAgent;
+import com.google.adk.agents.SequentialAgent;
+import com.google.adk.apps.App;
+import com.google.adk.artifacts.GcsArtifactService;
+import com.google.adk.events.Event;
+import com.google.adk.plugins.LoggingPlugin;
+import com.google.adk.runner.InMemoryRunner;
+import com.google.adk.runner.Runner;
+import com.google.adk.sessions.InMemorySessionService;
+import com.google.adk.sessions.Session;
+import com.google.adk.sessions.SessionKey;
+import com.google.adk.tools.GoogleMapsTool;
+import com.google.cloud.storage.StorageOptions;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.Part;
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.core.Maybe;
+import jakarta.enterprise.context.ApplicationScoped;
+import org.sqids.Sqids;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.List;
+import java.util.Optional;
+import java.util.Random;
+import java.util.concurrent.ConcurrentMap;
+
+@ApplicationScoped
+public class ComicTripAnalyzer {
+
+    public static final String COMIC_TRIP_PICTURE_BUCKET = "comic-trip-picture-bucket";
+    public static final String COMIC_TRIP_APP_NAME = "comic_trip_app";
+    public static final String COMIC_TRIP_USER = "comic_trip_user";
+
+    public ComicOutput analyzeComic(byte[] imageBytes, String mimeType, String tripId) {
+
+        LlmAgent comicTripAgent = LlmAgent.builder()
+            .model("gemini-3-flash-preview")
+            .name("comic_trip_agent")
+            .instruction("""
+                Analyze the picture and return:
+                - a detailed description of the content of the picture
+                - the location where this picture was probably taken
+                
+                Return the result as JSON, without any commentary
+                or Markdown code block notation, in the form:
+                
+                {"description": "The Eiffel tower from the Champs de Mars on a sunny day",
+                 "location": "Eiffel tower, Paris, France"}
+                """)
+            .outputKey("description_and_location")
+            .build();
+
+        LlmAgent comicCreatorAgent = LlmAgent.builder()
+            .model("gemini-3.1-flash-image-preview")
+            .name("comic_creator_agent")
+            .instruction("""
+                Turn this photography into a pop-art comic panel,
+                with thick black outlines, colors drops,
+                splashes and wide strokes or geometrical shapes.
+                Use halftone textures for non-primary colored areas,
+                and a vintage muted color palette.
+                A caption should describe the location, as given in:
+                {description_and_location}
+                """)
+            .generateContentConfig(GenerateContentConfig.builder()
+                .responseModalities("IMAGE")
+                .build())
+            .outputKey("comic_creator_agent")
+            .afterModelCallback((callbackContext, llmResponse) ->
+                llmResponse.content()
+                    .flatMap(Content::parts)
+                    .stream()
+                    .flatMap(List::stream)
+                    .filter(part -> part.inlineData().isPresent())
+                    .findFirst()
+                    .flatMap(part -> {
+                        byte[] comicImageBytes = part.inlineData().get().data().get();
+                        String imageId = generateId();
+                        saveFileLocally(imageId, comicImageBytes);
+
+                        callbackContext.saveArtifact(imageId + ".png", part)
+                            .blockingAwait();
+
+                        return Optional.of(imageId);
+                    }).map(imageId ->
+                            Maybe.just(llmResponse.toBuilder()
+                                .content(
+                                    Content.fromParts(
+                                        Part.fromText(imageId)))
+                                .build())
+                    ).orElse(Maybe.empty())
+                ).build();
+
+        LlmAgent poiGoogleMapsAgent = LlmAgent.builder()
+            .name("points_of_interest_agent")
+            .model("gemini-2.5-flash")
+            .instruction("""
+                Given the location in:
+                {description_and_location}
+                
+                Please list points of interest (POI)
+                in the area no further than a kilometer away
+                using the `google_maps` tool.
+                
+                Each POI should have a name and a description.
+                
+                Don't mention distances in your response.
+                And don't start with introductory text for the list.
+                """)
+            .tools(new GoogleMapsTool())
+            .outputKey("points_of_interest")
+            .build();
+
+        ParallelAgent poiAndCommicFlow = ParallelAgent.builder()
+            .name("poi_and_comic_flow")
+            .subAgents(
+                poiGoogleMapsAgent,
+                comicCreatorAgent)
+            .build();
+
+        SequentialAgent mainFlow = SequentialAgent.builder()
+            .name("main_flow")
+            .subAgents(
+                comicTripAgent,
+                poiAndCommicFlow)
+            .build();
+
+        App comicTripApp = App.builder()
+            .name(COMIC_TRIP_APP_NAME)
+            .plugins(List.of(
+                new LoggingPlugin(COMIC_TRIP_APP_NAME)))
+            .rootAgent(mainFlow)
+            .build();
+
+        InMemorySessionService sessionService = new InMemorySessionService();
+
+        Runner runner = InMemoryRunner.builder()
+            .app(comicTripApp)
+            .sessionService(sessionService)
+            .artifactService(new GcsArtifactService(
+                COMIC_TRIP_PICTURE_BUCKET,
+                StorageOptions.getDefaultInstance().getService()))
+            .build();
+
+        SessionKey sessionKey = new SessionKey(COMIC_TRIP_APP_NAME, COMIC_TRIP_USER, tripId);
+
+        Session session = runner.sessionService()
+            .createSession(sessionKey)
+            .blockingGet();
+
+        Flowable<Event> eventFlowable = runner.runAsync(
+            session.userId(), session.id(),
+            Content.fromParts(
+                Part.fromBytes(imageBytes, mimeType),
+                Part.fromText("Analyze this image.")));
+
+        eventFlowable.ignoreElements().blockingAwait();
+
+        session = runner.sessionService().getSession(sessionKey, null).blockingGet();
+        ConcurrentMap<String, Object> state = session.state();
+
+        String pointsOfInterest = (String) state.get("points_of_interest");
+        String descriptionAndLocation = (String) state.get("description_and_location");
+        String imageId = (String) state.get("comic_creator_agent");
+
+        String imageUrl = "";
+        if (imageId != null && !imageId.isEmpty()) {
+            imageUrl = "https://storage.googleapis.com/" + COMIC_TRIP_PICTURE_BUCKET + "/" + COMIC_TRIP_APP_NAME + "/" + COMIC_TRIP_USER + "/" + tripId + "/" + imageId + ".png/0";
+        }
+
+        ComicOutput.Image image = new ComicOutput.Image(imageUrl, null, "image/png");
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        try {
+            ComicOutput.Details details = objectMapper.readValue(descriptionAndLocation,
+                ComicOutput.Details.class);
+            return new ComicOutput(tripId, image, details, pointsOfInterest);
+        } catch (Exception e) {
+            return new ComicOutput(tripId, image,
+                new ComicOutput.Details(descriptionAndLocation, descriptionAndLocation),
+                pointsOfInterest);
+        }
+    }
+
+    private static String generateId() {
+        Sqids sqids = Sqids.builder().build();
+        return sqids.encode(List.of(new Random().nextLong(0, Integer.MAX_VALUE)));
+    }
+
+    private static void saveFileLocally(String imageId, byte[] comicImageBytes) {
+        try {
+            Files.write(Path.of(imageId + ".png"),
+                comicImageBytes,
+                StandardOpenOption.CREATE);
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        // Path input = Path.of("src/main/resources/istanbul/galata-tower.jpg");
+        Path input = Path.of("src/main/resources/istanbul/PXL_20250314_075430647.jpg");
+        byte[] originalImageBytes = Files.readAllBytes(input);
+        System.out.println("Image bytes read: " + originalImageBytes.length);
+
+        Sqids sqids = Sqids.builder().build();
+        String tripId = sqids.encode(List.of(System.currentTimeMillis()));
+        ComicOutput comicOutput = new ComicTripAnalyzer().analyzeComic(originalImageBytes, "image/png", tripId);
+
+        System.out.println("comicOutput = " + comicOutput);
+        System.exit(0);
+    }
+}
