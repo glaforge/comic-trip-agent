@@ -112,13 +112,13 @@ public class ComicTripAnalyzer {
 
                         return Optional.of(imageId);
                     }).map(imageId ->
-                            Maybe.just(llmResponse.toBuilder()
-                                .content(
-                                    Content.fromParts(
-                                        Part.fromText(imageId)))
-                                .build())
+                        Maybe.just(llmResponse.toBuilder()
+                            .content(
+                                Content.fromParts(
+                                    Part.fromText(imageId)))
+                            .build())
                     ).orElse(Maybe.empty())
-                ).build();
+            ).build();
 
         LlmAgent poiGoogleMapsAgent = LlmAgent.builder()
             .name("points_of_interest_agent")

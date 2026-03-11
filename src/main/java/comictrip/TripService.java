@@ -57,7 +57,7 @@ public class TripService {
         List<Map<String, Object>> pictures = new ArrayList<>();
         for (ComicOutput output : comicOutputs) {
             Map<String, Object> pic = new HashMap<>();
-            pic.put("fileName", output.image() != null ? output.image().name() : "");
+            pic.put("fileName", tripId);
             pic.put("description", output.details() != null ? output.details().description() : "");
             pic.put("location", output.details() != null ? output.details().location() : "");
             pic.put("mimeType", output.image() != null ? output.image().mimeType() : "");
