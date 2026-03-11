@@ -46,10 +46,14 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.ConcurrentMap;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
 @ApplicationScoped
 public class ComicTripAnalyzer {
 
-    public static final String COMIC_TRIP_PICTURE_BUCKET = "comic-trip-picture-bucket";
+    @ConfigProperty(name = "comic-trip.picture.bucket", defaultValue = "comic-trip-picture-bucket")
+    String comicTripPictureBucket;
+
     public static final String COMIC_TRIP_APP_NAME = "comic_trip_app";
     public static final String COMIC_TRIP_USER = "comic_trip_user";
 
@@ -160,7 +164,7 @@ public class ComicTripAnalyzer {
             .app(comicTripApp)
             .sessionService(sessionService)
             .artifactService(new GcsArtifactService(
-                COMIC_TRIP_PICTURE_BUCKET,
+                comicTripPictureBucket,
                 StorageOptions.getDefaultInstance().getService()))
             .build();
 
@@ -187,7 +191,7 @@ public class ComicTripAnalyzer {
 
         String imageUrl = "";
         if (imageId != null && !imageId.isEmpty()) {
-            imageUrl = "https://storage.googleapis.com/" + COMIC_TRIP_PICTURE_BUCKET + "/" + COMIC_TRIP_APP_NAME + "/" + COMIC_TRIP_USER + "/" + tripId + "/" + imageId + ".png/0";
+            imageUrl = "https://storage.googleapis.com/" + comicTripPictureBucket + "/" + COMIC_TRIP_APP_NAME + "/" + COMIC_TRIP_USER + "/" + tripId + "/" + imageId + ".png/0";
         }
 
         ComicOutput.Image image = new ComicOutput.Image(imageUrl, null, "image/png");
