@@ -12,6 +12,8 @@ This project relies on the **Agent Development Kit (ADK) for Java** to define, o
 
 The image analysis and generation process is driven by multiple specialized AI agents, orchestrated both sequentially and in parallel:
 
+![Multi-Agent Architecture Diagram](multi-agent-diagram.png)
+
 1.  **`comicTripAgent` (LlmAgent)**
     *   **Model:** `gemini-3-flash-preview`
     *   **Task:** Analyzes the uploaded picture to extract a detailed description of its contents and identifies the probable location where it was taken.
@@ -45,10 +47,39 @@ The application uses two primary storage mechanisms on Google Cloud to handle st
 1.  **Google Cloud Storage (GCS)**
     *   **Usage**: Stores the generated pop-art comic image files.
     *   **Implementation**: Fully integrated into the ADK `Runner` configuration using `GcsArtifactService`. It handles the automated upload of generated artifacts to the `comic-trip-picture-bucket`. During the `comicCreatorAgent`'s callback phase, the image is passed to `callbackContext.saveArtifact(...)` to safely upload the generated media to GCS.
+    *   **Directory Structure**: The ADK structures artifacts hierarchically based on the app name, user, session (trip ID), and artifact name. The resulting path in the bucket looks like this:
+        ```text
+        gs://comic-trip-picture-bucket/comic_trip_app/comic_trip_user/{tripId}/{imageId}.png/0
+        ```
 
 2.  **Firestore Database**
     *   **Usage**: Stores the structured metadata of the generated trips.
     *   **Implementation**: Managed by `TripService.java`. It persists trip data to the `comic-trip` Firestore database inside the `trips` collection. The stored documents include the trip's title and an array of picture objects containing their textual descriptions, recognized locations, generated image URLs (pointing to the GCS bucket), and the nearby points of interest gathered by the agents.
+    *   **Data Structure**: Each document in the `trips` collection represents a single trip (identified by `{tripId}`) and is structured as follows:
+        ```json
+        {
+          "tripId": "x7bY9p",
+          "title": "GALATA GOLD: ISTANBUL RISING",
+          "pictures": [
+            {
+              "tripId": "x7bY9p",
+              "image": {
+                "name": "https://storage.googleapis.com/comic-trip-picture-bucket/.../{imageId}.png/0",
+                "mimeType": "image/png"
+              },
+              "details": {
+                "description": "A view of the iconic Galata Tower...",
+                "location": "Galata Tower, Istanbul, Turkey"
+              },
+              "pointsOfInterest": "* Torre Galata...\n* Kamondo Stairs..."
+            }
+          ]
+        }
+        ```
+
+## Deployment
+
+For instructions on how to build and deploy the Comic Travel Agent application to Google Cloud Run from source, please refer to the [Deployment Guide](DEPLOY.md).
 
 ## License
 
