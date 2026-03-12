@@ -1,6 +1,7 @@
 # Deployment Guide: Comic Trip
 
-This guide details the process for deploying the Comic Trip Quarkus application to Google Cloud Run directly from source, bypassing Cloud Build (`--no-build` flag), and utilizing Secret Manager for the Gemini API key.
+This guide details the process for deploying the Comic Trip Quarkus and ADK Java application to Google Cloud Run 
+directly from source, bypassing Cloud Build (`--no-build` flag), and utilizing Secret Manager for the Gemini API key.
 
 ## Prerequisites
 
@@ -17,7 +18,8 @@ gcloud config set project <YOUR_PROJECT_ID>
 
 ## 1. Build the Application
 
-Since we are deploying without Cloud Build, we need to compile the Quarkus application locally into an executable "uber-jar" that includes all necessary dependencies.
+Since we are deploying without Cloud Build, we need to compile the Quarkus application locally 
+into an executable "uber-jar" that includes all necessary dependencies.
 
 ```bash
 # Build the executable runner JAR
@@ -27,7 +29,9 @@ This command generates the `target/comic-trip-agent-1.0-SNAPSHOT-runner.jar` fil
 
 ## 2. Prepare the Staging Directory
 
-Cloud Run's source deploy feature has an upload size limit of 250MB. To stay well under this limit and avoid uploading unnecessary files (like target classes or build analytics), we isolate the JAR into a clean staging directory.
+Cloud Run's source deploy feature has an upload size limit of 250MB. 
+To stay well under this limit and avoid uploading unnecessary files (like target classes or build analytics), 
+we isolate the JAR into a clean staging directory.
 
 ```bash
 # Create a staging directory
@@ -62,7 +66,8 @@ gcloud beta run deploy comic-trip \
 
 ## 4. Configure Secrets (Gemini API Key)
 
-The application requires a Gemini API key to interact with Google's GenAI models. We store this securely in Google Cloud Secret Manager.
+The application requires a Gemini API key to interact with Google's GenAI models. 
+We store this securely in Google Cloud Secret Manager.
 
 ### Create the Secret (If not already created)
 ```bash
@@ -75,7 +80,8 @@ echo -n "YOUR_ACTUAL_API_KEY" | gcloud secrets create comic-trip-gemini-key \
 ### Grant Access to the Cloud Run Service Account
 The default Cloud Run service account must be granted permission to read the secret. 
 
-Replace `PROJECT_NUMBER` below with your actual Google Cloud Project Number (found in the console or via `gcloud projects describe <PROJECT_ID>`).
+Replace `PROJECT_NUMBER` below with your actual Google Cloud Project Number 
+(found in the console or via `gcloud projects describe <PROJECT_ID>`).
 
 ```bash
 gcloud secrets add-iam-policy-binding comic-trip-gemini-key \
@@ -84,7 +90,8 @@ gcloud secrets add-iam-policy-binding comic-trip-gemini-key \
 ```
 
 ### Expose the Secret as an Environment Variable
-Finally, update the Cloud Run service to map the Secret Manager secret to the `GEMINI_API_KEY` environment variable expected by the application.
+Finally, update the Cloud Run service to map the Secret Manager secret 
+to the `GEMINI_API_KEY` environment variable expected by the application.
 
 ```bash
 gcloud run services update comic-trip \
@@ -94,4 +101,5 @@ gcloud run services update comic-trip \
 
 ## 5. Verify Deployment
 
-Your application is now live. `gcloud` will output the service URL (e.g., `https://comic-trip-<hash>.europe-west1.run.app`). Visit this URL in your browser to verify the Comic Trip application is successfully running.
+Your application is now live. `gcloud` will output the service URL (e.g., `https://comic-trip-has.europe-west1.run.app`). 
+Visit this URL in your browser to verify the Comic Trip application is successfully running.
