@@ -57,14 +57,18 @@ public class ComicTripAnalyzer {
     @ConfigProperty(name = "comic-trip.picture.bucket", defaultValue = "comic-trip-picture-bucket")
     String comicTripPictureBucket;
 
-    public static final String COMIC_TRIP_APP_NAME = "comic_trip_app";
-    public static final String COMIC_TRIP_USER = "comic_trip_user";
+    private static final String COMIC_TRIP_APP_NAME = "comic_trip_app";
+    private static final String COMIC_TRIP_USER = "comic_trip_user";
+
+    private static final String OUTPUT_KEY_COMIC_ILLUSTRATION = "comic_illustration";
+    private static final String OUTPUT_KEY_DESCRIPTION_AND_LOCATION = "description_and_location";
+    private static final String OUTPUT_KEY_POINTS_OF_INTEREST = "points_of_interest";
 
     public ComicOutput analyzeComic(byte[] imageBytes, String mimeType, String tripId) {
 
         LlmAgent comicTripAgent = LlmAgent.builder()
             .model("gemini-3-flash-preview")
-            .name("comic_trip_agent")
+            .name("picture_analyzer_agent")
             .instruction("""
                 Analyze the picture and return:
                 - a detailed description of the content of the picture
@@ -76,12 +80,12 @@ public class ComicTripAnalyzer {
                 {"description": "The Eiffel tower from the Champs de Mars on a sunny day",
                  "location": "Eiffel tower, Paris, France"}
                 """)
-            .outputKey("description_and_location")
+            .outputKey(OUTPUT_KEY_DESCRIPTION_AND_LOCATION)
             .build();
 
         LlmAgent comicCreatorAgent = LlmAgent.builder()
             .model("gemini-3.1-flash-image-preview")
-            .name("comic_creator_agent")
+            .name("comic_illustrator_agent")
             .instruction("""
                 Turn this photography into a pop-art comic panel,
                 with thick black outlines, colors drops,
@@ -94,7 +98,7 @@ public class ComicTripAnalyzer {
             .generateContentConfig(GenerateContentConfig.builder()
                 .responseModalities("IMAGE")
                 .build())
-            .outputKey("comic_creator_agent")
+            .outputKey(OUTPUT_KEY_COMIC_ILLUSTRATION)
             .afterModelCallback((callbackContext, llmResponse) ->
                 llmResponse.content()
                     .flatMap(Content::parts)
@@ -137,7 +141,7 @@ public class ComicTripAnalyzer {
                 And don't start with introductory text for the list.
                 """)
             .tools(new GoogleMapsTool())
-            .outputKey("points_of_interest")
+            .outputKey(OUTPUT_KEY_POINTS_OF_INTEREST)
             .build();
 
         ParallelAgent poiAndCommicFlow = ParallelAgent.builder()
@@ -188,13 +192,17 @@ public class ComicTripAnalyzer {
         session = runner.sessionService().getSession(sessionKey, null).blockingGet();
         ConcurrentMap<String, Object> state = session.state();
 
-        String pointsOfInterest = (String) state.get("points_of_interest");
-        String descriptionAndLocation = (String) state.get("description_and_location");
-        String imageId = (String) state.get("comic_creator_agent");
+        String pointsOfInterest = (String) state.get(OUTPUT_KEY_POINTS_OF_INTEREST);
+        String descriptionAndLocation = (String) state.get(OUTPUT_KEY_DESCRIPTION_AND_LOCATION);
+        String imageId = (String) state.get(OUTPUT_KEY_COMIC_ILLUSTRATION);
 
         String imageUrl = "";
         if (imageId != null && !imageId.isEmpty()) {
-            imageUrl = "https://storage.googleapis.com/" + comicTripPictureBucket + "/" + COMIC_TRIP_APP_NAME + "/" + COMIC_TRIP_USER + "/" + tripId + "/" + imageId + ".png/0";
+            imageUrl = "https://storage.googleapis.com/" + comicTripPictureBucket +
+                "/" + COMIC_TRIP_APP_NAME +
+                "/" + COMIC_TRIP_USER +
+                "/" + tripId +
+                "/" + imageId + ".png/0";
         }
 
         ComicOutput.Image image = new ComicOutput.Image(imageUrl, null, "image/png");

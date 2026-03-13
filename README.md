@@ -27,34 +27,34 @@ using different Gemini models, orchestrated both sequentially and in parallel:
 
 ![Multi-Agent Architecture Diagram](multi-agent-diagram.png)
 
-1.  **`comicTripAgent` (LlmAgent)**
+1.  **`picture_analyzer_agent` (LlmAgent)**
     *   **Model:** `gemini-3-flash-preview`
     *   **Task:** Analyzes the uploaded picture to extract a detailed description of its contents 
         and identifies the probable location where it was taken.
     *   **Output:** Returns a structured JSON payload containing the `description` and `location`.
 
-2.  **`comicCreatorAgent` (LlmAgent)**
+2.  **`comic_illustrator_agent` (LlmAgent)**
     *   **Model:** `gemini-3.1-flash-image-preview` (aka 🍌 Nano Banana 2)
     *   **Task:** Takes the extracted description and location, and transforms the original photography 
         into a pop-art comic panel featuring thick black outlines, color drops, halftone textures, and a vintage palette.
     *   **Callbacks:** Utilizes an `afterModelCallback` to intercept the multimodal LLM response,
         extract the generated image bytes, save the file locally (for debugging purpose), and persist it as an artifact.
 
-3.  **`poiGoogleMapsAgent` (LlmAgent)**
+3.  **`points_of_interest_agent` (LlmAgent)**
     *   **Model:** `gemini-2.5-flash`
     *   **Tools:** `GoogleMapsTool`
     *   **Task:** Uses the location identified by the first agent to list points of interest (POI) 
         within a kilometer radius, providing a name and description for each location using Google Maps data.
 
-4.  **`poiAndCommicFlow` (ParallelAgent)**
+4.  **`poi_and_commic_flow` (ParallelAgent)**
     *   **Task:** Orchestrates the `comicCreatorAgent` and `poiGoogleMapsAgent` to run simultaneously.
         Since both agents depend on the output of the initial analysis but are independent of each other, 
         running them in parallel significantly improves the overall processing time.
 
-5.  **`mainFlow` (SequentialAgent)**
+5.  **`main_flow` (SequentialAgent)**
     *   **Task:** The root flow that strictly orders the execution: 
-        it first runs the `comicTripAgent` to gather the necessary context, 
-        and subsequently triggers the `poiAndCommicFlow`.
+        it first runs the `comic_trip_agent` to gather the necessary context, 
+        and subsequently triggers the `poi_and_commic_flow`.
 
 ### ADK Core Concepts
 
