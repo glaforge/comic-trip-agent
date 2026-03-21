@@ -43,9 +43,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.ConcurrentMap;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -186,7 +186,7 @@ public class ComicTripAnalyzer {
         eventFlowable.ignoreElements().blockingAwait();
 
         session = runner.sessionService().getSession(sessionKey, null).blockingGet();
-        ConcurrentMap<String, Object> state = session.state();
+        Map<String, Object> state = session.state();
 
         String pointsOfInterest = (String) state.get(OUTPUT_KEY_POINTS_OF_INTEREST);
         String descriptionAndLocation = (String) state.get(OUTPUT_KEY_DESCRIPTION_AND_LOCATION);
