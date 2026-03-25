@@ -23,8 +23,9 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
-import org.jboss.resteasy.plugins.providers.multipart.InputPart;
-import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
+import org.jboss.resteasy.reactive.RestForm;
+import org.jboss.resteasy.reactive.multipart.FileUpload;
+import java.nio.file.Files;
 import org.jspecify.annotations.Nullable;
 import org.sqids.Sqids;
 
@@ -50,33 +51,23 @@ public class MissionControlResource {
     @Path("/upload")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.APPLICATION_JSON)
-    public Response uploadFiles(MultipartFormDataInput input) {
-        List<InputPart> fileParts = input.getFormDataMap().get("file");
-        if (fileParts == null || fileParts.isEmpty()) {
+    public Response uploadFiles(@RestForm("file") List<FileUpload> files) {
+        if (files == null || files.isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST).entity("No files uploaded").build();
         }
 
         List<ComicOutput.Image> filesToProcess;
         try {
-            filesToProcess = fileParts.stream()
-                .map(part -> {
+            filesToProcess = files.stream()
+                .map(file -> {
                     try {
-                        String contentDisposition = part.getHeaders().getFirst("Content-Disposition");
-                        String fileName = "unknown";
-                        if (contentDisposition != null) {
-                            for (String cd : contentDisposition.split(";")) {
-                                if (cd.trim().startsWith("filename")) {
-                                    fileName = cd.split("=")[1].trim().replace("\"", "");
-                                }
-                            }
-                        }
-                        byte[] fileBytes = part.getBody(byte[].class, null);
-                        String mimeType = fileName.endsWith(".png") ? "image/png"
-                            : "image/jpeg";
+                        String fileName = file.fileName();
+                        byte[] fileBytes = Files.readAllBytes(file.filePath());
+                        String mimeType = file.contentType();
                         return new ComicOutput.Image(fileName, fileBytes, mimeType);
                     } catch (IOException e) {
-                        LOGGER.error("Failed to read file part", e);
-                        throw new RuntimeException("Failed to read file part", e);
+                        LOGGER.error("Failed to read file", e);
+                        throw new RuntimeException("Failed to read file", e);
                     }
                 })
                 .toList();
