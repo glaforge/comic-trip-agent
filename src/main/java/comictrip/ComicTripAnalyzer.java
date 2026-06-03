@@ -67,121 +67,120 @@ public class ComicTripAnalyzer {
     public ComicOutput analyzeComic(byte[] imageBytes, String mimeType, String tripId) {
 
         LlmAgent comicTripAgent = LlmAgent.builder()
-            .model("gemini-3-flash-preview")
-            .name("picture_analyzer_agent")
-            .instruction("""
-                Analyze the picture and return:
-                - a detailed description of the content of the picture
-                - the location where this picture was probably taken
-                
-                Return the result as JSON, without any commentary
-                or Markdown code block notation, in the form:
-                
-                {"description": "The Eiffel tower from the Champs de Mars on a sunny day",
-                 "location": "Eiffel tower, Paris, France"}
-                """)
-            .outputKey(OUTPUT_KEY_DESCRIPTION_AND_LOCATION)
-            .build();
+                .model("gemini-3.5-flash")
+                .name("picture_analyzer_agent")
+                .instruction("""
+                        Analyze the picture and return:
+                        - a detailed description of the content of the picture
+                        - the location where this picture was probably taken
+
+                        Return the result as JSON, without any commentary
+                        or Markdown code block notation, in the form:
+
+                        {"description": "The Eiffel tower from the Champs de Mars on a sunny day",
+                         "location": "Eiffel tower, Paris, France"}
+                        """)
+                .outputKey(OUTPUT_KEY_DESCRIPTION_AND_LOCATION)
+                .build();
 
         LlmAgent comicCreatorAgent = LlmAgent.builder()
-            .model("gemini-3.1-flash-image-preview")
-            .name("comic_illustrator_agent")
-            .instruction("""
-                Turn this photography into a pop-art comic panel,
-                with thick black outlines, colors drops,
-                splashes and wide strokes or geometrical shapes.
-                Use halftone textures for non-primary colored areas,
-                and a vintage muted color palette.
-                A caption should describe the location, as given in:
-                {description_and_location}
-                """)
-            .generateContentConfig(GenerateContentConfig.builder()
-                .responseModalities("IMAGE")
-                .build())
-            .outputKey(OUTPUT_KEY_COMIC_ILLUSTRATION)
-            .afterModelCallback((callbackContext, llmResponse) ->
-                Maybe.fromOptional(llmResponse.content()
-                    .flatMap(Content::parts)
-                    .stream()
-                    .flatMap(List::stream)
-                    .filter(part -> part.inlineData().isPresent())
-                    .findFirst()
-                    .flatMap(part -> {
-                        byte[] comicImageBytes = part.inlineData().get().data().get();
-                        String imageId = generateId();
-                        saveFileLocally(imageId, comicImageBytes);
+                .model("gemini-3.1-flash-image")
+                .name("comic_illustrator_agent")
+                .instruction("""
+                        Turn this photography into a pop-art comic panel,
+                        with thick black outlines, colors drops,
+                        splashes and wide strokes or geometrical shapes.
+                        Use halftone textures for non-primary colored areas,
+                        and a vintage muted color palette.
+                        A caption should describe the location, as given in:
+                        {description_and_location}
+                        """)
+                .generateContentConfig(GenerateContentConfig.builder()
+                        .responseModalities("IMAGE")
+                        .build())
+                .outputKey(OUTPUT_KEY_COMIC_ILLUSTRATION)
+                .afterModelCallback((callbackContext, llmResponse) -> Maybe.fromOptional(llmResponse.content()
+                        .flatMap(Content::parts)
+                        .stream()
+                        .flatMap(List::stream)
+                        .filter(part -> part.inlineData().isPresent())
+                        .findFirst()
+                        .flatMap(part -> {
+                            byte[] comicImageBytes = part.inlineData().get().data().get();
+                            String imageId = generateId();
+                            saveFileLocally(imageId, comicImageBytes);
 
-                        callbackContext.saveArtifact(imageId + ".png", part)
-                            .blockingAwait();
+                            callbackContext.saveArtifact(imageId + ".png", part)
+                                    .blockingAwait();
 
-                        return Optional.of(llmResponse.toBuilder()
-                            .content(Content.fromParts(Part.fromText(imageId)))
-                            .build());
-                    }))
-            ).build();
+                            return Optional.of(llmResponse.toBuilder()
+                                    .content(Content.fromParts(Part.fromText(imageId)))
+                                    .build());
+                        })))
+                .build();
 
         LlmAgent poiGoogleMapsAgent = LlmAgent.builder()
-            .name("points_of_interest_agent")
-            .model("gemini-2.5-flash")
-            .instruction("""
-                Given the location in:
-                {description_and_location}
-                
-                Please list points of interest (POI)
-                in the area no further than a kilometer away
-                using the `google_maps` tool.
-                
-                Each POI should have a name and a description.
-                
-                Don't mention distances in your response.
-                And don't start with introductory text for the list.
-                """)
-            .tools(new GoogleMapsTool())
-            .outputKey(OUTPUT_KEY_POINTS_OF_INTEREST)
-            .build();
+                .name("points_of_interest_agent")
+                .model("gemini-3.5-flash")
+                .instruction("""
+                        Given the location in:
+                        {description_and_location}
+
+                        Please list points of interest (POI)
+                        in the area no further than a kilometer away
+                        using the `google_maps` tool.
+
+                        Each POI should have a name and a description.
+
+                        Don't mention distances in your response.
+                        And don't start with introductory text for the list.
+                        """)
+                .tools(new GoogleMapsTool())
+                .outputKey(OUTPUT_KEY_POINTS_OF_INTEREST)
+                .build();
 
         ParallelAgent poiAndCommicFlow = ParallelAgent.builder()
-            .name("poi_and_comic_flow")
-            .subAgents(
-                poiGoogleMapsAgent,
-                comicCreatorAgent)
-            .build();
+                .name("poi_and_comic_flow")
+                .subAgents(
+                        poiGoogleMapsAgent,
+                        comicCreatorAgent)
+                .build();
 
         SequentialAgent mainFlow = SequentialAgent.builder()
-            .name("main_flow")
-            .subAgents(
-                comicTripAgent,
-                poiAndCommicFlow)
-            .build();
+                .name("main_flow")
+                .subAgents(
+                        comicTripAgent,
+                        poiAndCommicFlow)
+                .build();
 
         App comicTripApp = App.builder()
-            .name(COMIC_TRIP_APP_NAME)
-            .plugins(List.of(
-                new LoggingPlugin(COMIC_TRIP_APP_NAME)))
-            .rootAgent(mainFlow)
-            .build();
+                .name(COMIC_TRIP_APP_NAME)
+                .plugins(List.of(
+                        new LoggingPlugin(COMIC_TRIP_APP_NAME)))
+                .rootAgent(mainFlow)
+                .build();
 
         InMemorySessionService sessionService = new InMemorySessionService();
 
         Runner runner = InMemoryRunner.builder()
-            .app(comicTripApp)
-            .sessionService(sessionService)
-            .artifactService(new GcsArtifactService(
-                comicTripPictureBucket,
-                StorageOptions.getDefaultInstance().getService()))
-            .build();
+                .app(comicTripApp)
+                .sessionService(sessionService)
+                .artifactService(new GcsArtifactService(
+                        comicTripPictureBucket,
+                        StorageOptions.getDefaultInstance().getService()))
+                .build();
 
         SessionKey sessionKey = new SessionKey(COMIC_TRIP_APP_NAME, COMIC_TRIP_USER, tripId);
 
         Session session = runner.sessionService()
-            .createSession(sessionKey)
-            .blockingGet();
+                .createSession(sessionKey)
+                .blockingGet();
 
         Flowable<Event> eventFlowable = runner.runAsync(
-            session.userId(), session.id(),
-            Content.fromParts(
-                Part.fromBytes(imageBytes, mimeType),
-                Part.fromText("Analyze this image.")));
+                session.userId(), session.id(),
+                Content.fromParts(
+                        Part.fromBytes(imageBytes, mimeType),
+                        Part.fromText("Analyze this image.")));
 
         eventFlowable.ignoreElements().blockingAwait();
 
@@ -195,10 +194,10 @@ public class ComicTripAnalyzer {
         String imageUrl = "";
         if (imageId != null && !imageId.isEmpty()) {
             imageUrl = "https://storage.googleapis.com/" + comicTripPictureBucket +
-                "/" + COMIC_TRIP_APP_NAME +
-                "/" + COMIC_TRIP_USER +
-                "/" + tripId +
-                "/" + imageId + ".png/0";
+                    "/" + COMIC_TRIP_APP_NAME +
+                    "/" + COMIC_TRIP_USER +
+                    "/" + tripId +
+                    "/" + imageId + ".png/0";
         }
 
         ComicOutput.Image image = new ComicOutput.Image(imageUrl, null, "image/png");
@@ -206,13 +205,13 @@ public class ComicTripAnalyzer {
 
         try {
             ComicOutput.Details details = objectMapper.readValue(descriptionAndLocation,
-                ComicOutput.Details.class);
+                    ComicOutput.Details.class);
             return new ComicOutput(tripId, image, details, pointsOfInterest);
         } catch (Exception e) {
             LOGGER.error("Failed to parse comic trip details", e);
             return new ComicOutput(tripId, image,
-                new ComicOutput.Details(descriptionAndLocation, descriptionAndLocation),
-                pointsOfInterest);
+                    new ComicOutput.Details(descriptionAndLocation, descriptionAndLocation),
+                    pointsOfInterest);
         }
     }
 
@@ -224,8 +223,8 @@ public class ComicTripAnalyzer {
     private static void saveFileLocally(String imageId, byte[] comicImageBytes) {
         try {
             Files.write(Path.of(imageId + ".png"),
-                comicImageBytes,
-                StandardOpenOption.CREATE);
+                    comicImageBytes,
+                    StandardOpenOption.CREATE);
         } catch (IOException e) {
             LOGGER.error("Failed to save file locally", e);
         }
